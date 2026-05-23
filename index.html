@@ -1,0 +1,1447 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+    <title>MyPortal 智慧生產力入口</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        :root {
+            --blue: #4285F4;
+            --red: #EA4335;
+            --yellow: #FBBC05;
+            --green: #34A853;
+            --bg: #f0f2f5;
+            --card: #ffffff;
+            --text: #202124;
+            --sub: #5f6368;
+            --border: #dadce0;
+            --shadow: 0 2px 8px rgba(0,0,0,0.08);
+            --radius: 14px;
+            --topbar-h: 60px;
+        }
+
+        html { font-size: 16px; }
+
+        *, *::before, *::after { box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+            -webkit-text-size-adjust: 100%;
+        }
+
+        /* ══════════════════════════════
+           TOP BAR
+        ══════════════════════════════ */
+        .top-bar {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            background: linear-gradient(135deg, #1a73e8 0%, #0d47a1 100%);
+            height: var(--topbar-h);
+            padding: 0 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 15px;
+            color: rgba(255,255,255,0.92);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.22);
+        }
+
+        .top-bar-left { display: flex; align-items: center; gap: 14px; min-width: 0; overflow: hidden; }
+        .top-bar-right { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+
+        #geoStatus { font-size: 14px; opacity: 0.85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
+        #weatherQuick { font-size: 14px; white-space: nowrap; }
+
+        .clock-display { font-size: 20px; font-weight: 700; letter-spacing: 0.5px; white-space: nowrap; }
+        .date-display { font-size: 13px; opacity: 0.75; text-align: right; }
+
+        /* ══════════════════════════════
+           LAYOUT WRAPPER
+        ══════════════════════════════ */
+        .wrapper {
+            display: grid;
+            grid-template-columns: 340px 340px;
+            gap: 18px;
+            max-width: 720px;
+            margin: 18px auto;
+            padding: 0 16px;
+            align-items: start;
+            justify-content: center;
+        }
+
+        /* ══════════════════════════════
+           CARDS
+        ══════════════════════════════ */
+        .card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 20px;
+            margin-bottom: 18px;
+            box-shadow: var(--shadow);
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            border-bottom: 2px solid var(--bg);
+            padding-bottom: 12px;
+            margin-bottom: 16px;
+            cursor: default;
+        }
+
+        .card-header-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 17px;
+            font-weight: 600;
+            margin: 0;
+        }
+
+        /* collapsible card headers */
+        .card-collapsible .card-header { cursor: pointer; user-select: none; }
+        .card-collapsible .card-header:hover { opacity: 0.85; }
+
+        .card-toggle-icon {
+            font-size: 14px;
+            color: var(--sub);
+            transition: transform 0.25s;
+            flex-shrink: 0;
+        }
+
+        .card-collapsible.collapsed .card-toggle-icon { transform: rotate(-90deg); }
+
+        .card-body {
+            overflow: hidden;
+            transition: max-height 0.3s ease, opacity 0.25s;
+            max-height: 2000px;
+            opacity: 1;
+        }
+
+        .card-collapsible.collapsed .card-body {
+            max-height: 0;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        /* ══════════════════════════════
+           SEARCH SECTION
+        ══════════════════════════════ */
+        .search-section { text-align: center; padding: 14px 0 8px; }
+
+        .logo {
+            font-size: 36px;
+            font-weight: 800;
+            letter-spacing: -1px;
+            margin-bottom: 16px;
+            line-height: 1;
+        }
+
+        .search-box-container { max-width: 600px; margin: 0 auto; position: relative; }
+
+        .search-box {
+            width: 100%;
+            padding: 16px 52px 16px 22px;
+            font-size: 16px;
+            border: 1px solid var(--border);
+            border-radius: 30px;
+            outline: none;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+            transition: box-shadow 0.2s, border-color 0.2s;
+            background: white;
+        }
+
+        .search-box:focus {
+            box-shadow: 0 4px 16px rgba(32,33,36,0.15);
+            border-color: transparent;
+        }
+
+        .search-clear-btn {
+            position: absolute;
+            right: 14px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: var(--sub);
+            font-size: 20px;
+            display: none;
+            padding: 6px;
+            line-height: 1;
+            border-radius: 50%;
+            transition: background 0.2s;
+            min-width: 44px;
+            min-height: 44px;
+            display: none;
+            align-items: center;
+            justify-content: center;
+        }
+        .search-clear-btn:hover { background: var(--bg); }
+
+        .search-hint { font-size: 13px; color: var(--sub); margin-top: 8px; padding: 0 8px; }
+
+        .quick-engines {
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            margin-top: 12px;
+            flex-wrap: wrap;
+        }
+
+        .engine-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 9px 16px;
+            border-radius: 20px;
+            border: 1px solid var(--border);
+            background: white;
+            font-size: 14px;
+            cursor: pointer;
+            color: var(--sub);
+            transition: all 0.2s;
+            white-space: nowrap;
+            min-height: 44px;
+        }
+        .engine-btn:hover { background: var(--bg); color: var(--text); box-shadow: var(--shadow); }
+
+        /* ══════════════════════════════
+           BUTTONS
+        ══════════════════════════════ */
+        .btn-group { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+
+        .btn {
+            background: var(--card);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 10px 16px;
+            font-size: 14px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 500;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: background 0.2s, box-shadow 0.2s;
+            white-space: nowrap;
+            min-height: 44px;
+        }
+        .btn:hover { background: #f1f3f4; box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
+        .btn-primary { background: var(--blue); color: white; border-color: transparent; }
+        .btn-primary:hover { background: #357ae8; box-shadow: 0 2px 6px rgba(66,133,244,0.4); }
+        .btn-danger { color: var(--red); }
+        .btn-danger:hover { background: #fdecea; }
+        .btn-success { background: var(--green); color: white; border-color: transparent; }
+        .btn-success:hover { background: #2d9147; }
+
+        .btn-icon {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 18px;
+            padding: 6px 8px;
+            border-radius: 6px;
+            transition: background 0.2s;
+            line-height: 1;
+            min-width: 44px;
+            min-height: 44px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .btn-icon:hover { background: var(--bg); }
+
+        /* ══════════════════════════════
+           ADD FORM (collapsible)
+        ══════════════════════════════ */
+        .add-form-toggle-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+
+        .add-form-panel {
+            overflow: hidden;
+            max-height: 0;
+            opacity: 0;
+            transition: max-height 0.3s ease, opacity 0.25s;
+            pointer-events: none;
+        }
+
+        .add-form-panel.open {
+            max-height: 400px;
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .add-form {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            padding: 14px;
+            background: var(--bg);
+            border-radius: 8px;
+            border: 1px dashed var(--border);
+            margin-bottom: 12px;
+        }
+
+        .add-form input, .add-form select {
+            padding: 12px 14px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 16px;
+            width: 100%;
+            background: white;
+            transition: border-color 0.2s;
+            min-height: 48px;
+        }
+        .add-form input:focus, .add-form select:focus { outline: none; border-color: var(--blue); }
+        .add-form .full-width { grid-column: span 2; }
+        .add-form .form-actions { grid-column: span 2; display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+        #formTitle { grid-column: span 2; font-size: 15px; font-weight: 600; color: var(--blue); margin-bottom: 2px; }
+
+        /* ══════════════════════════════
+           TABS
+        ══════════════════════════════ */
+        .tabs-container {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 14px;
+            overflow-x: auto;
+            padding-bottom: 4px;
+            scrollbar-width: none;
+            -webkit-overflow-scrolling: touch;
+        }
+        .tabs-container::-webkit-scrollbar { display: none; }
+
+        .tab-btn {
+            background: none;
+            border: 1px solid var(--border);
+            padding: 9px 16px;
+            font-size: 14px;
+            border-radius: 22px;
+            cursor: pointer;
+            color: var(--sub);
+            white-space: nowrap;
+            transition: all 0.2s;
+            flex-shrink: 0;
+            min-height: 44px;
+        }
+        .tab-btn:hover { background: var(--bg); color: var(--text); }
+        .tab-btn.active { background: #e8f0fe; color: var(--blue); border-color: transparent; font-weight: 600; }
+
+        /* ══════════════════════════════
+           LINK ITEMS
+        ══════════════════════════════ */
+        .links-grid { display: flex; flex-direction: column; }
+
+        .link-item {
+            padding: 14px 8px;
+            border-bottom: 1px solid #f1f3f4;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            transition: background 0.15s;
+            border-radius: 8px;
+            gap: 6px;
+        }
+        .link-item:hover { background: #fafbff; }
+        .link-item:last-child { border-bottom: none; }
+
+        .link-content { flex: 1; min-width: 0; }
+
+        /* Row 1: star + favicon + title (truncates) */
+        .link-item-header {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            min-width: 0;
+            flex-wrap: nowrap;
+        }
+
+        /* Row 2: badge + desc on separate lines */
+        .link-meta { margin-top: 5px; display: flex; flex-direction: column; gap: 3px; }
+
+        .fav-icon {
+            cursor: pointer;
+            color: #ddd;
+            font-size: 20px;
+            user-select: none;
+            transition: color 0.2s, transform 0.15s;
+            flex-shrink: 0;
+            min-width: 36px;
+            min-height: 44px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .fav-icon:hover { color: var(--yellow); transform: scale(1.2); }
+        .fav-icon.active { color: var(--yellow); }
+
+        .link-favicon { width: 20px; height: 20px; border-radius: 3px; flex-shrink: 0; }
+
+        .link-title {
+            color: #1558d6;
+            font-size: 16px;
+            font-weight: 600;
+            text-decoration: none;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            min-width: 0;
+            flex: 1;
+        }
+        .link-title:hover { text-decoration: underline; }
+
+        .link-category-badge {
+            display: inline-block;
+            font-size: 12px;
+            padding: 2px 8px;
+            border-radius: 10px;
+            background: #e8f0fe;
+            color: var(--blue);
+            font-weight: 500;
+            white-space: nowrap;
+            align-self: flex-start;
+        }
+
+        /* URL hidden on mobile, shown on desktop */
+        .link-url {
+            color: #1a7f37;
+            font-size: 12px;
+            margin-top: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .link-desc {
+            color: #4d5156;
+            font-size: 14px;
+            line-height: 1.5;
+            /* Allow wrapping on mobile */
+            white-space: normal;
+            word-break: break-word;
+        }
+
+        /* Stack edit/delete vertically so they don't push width */
+        .link-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            align-items: center;
+            flex-shrink: 0;
+        }
+
+        .empty-hint { text-align: center; color: var(--sub); font-size: 14px; padding: 24px 0; }
+
+        /* ══════════════════════════════
+           COUNT BADGE
+        ══════════════════════════════ */
+        .count-badge {
+            background: var(--blue);
+            color: white;
+            font-size: 13px;
+            font-weight: 700;
+            padding: 2px 9px;
+            border-radius: 12px;
+        }
+
+        /* ══════════════════════════════
+           WEATHER
+        ══════════════════════════════ */
+        .weather-display { text-align: center; padding: 4px 0 6px; }
+        .weather-temp { font-size: 52px; font-weight: 700; color: var(--blue); line-height: 1; }
+        .weather-desc { font-size: 18px; font-weight: 600; margin-top: 6px; }
+        .weather-sub { font-size: 14px; color: var(--sub); margin-top: 4px; }
+        .weather-detail-row { display: flex; justify-content: center; gap: 14px; margin-top: 12px; }
+        .weather-detail-item { font-size: 13px; color: var(--sub); text-align: center; }
+        .weather-detail-item span { display: block; font-size: 16px; font-weight: 600; color: var(--text); }
+
+        /* ══════════════════════════════
+           TODO
+        ══════════════════════════════ */
+        .todo-input-wrapper { display: flex; gap: 8px; margin-bottom: 12px; }
+
+        .todo-input {
+            flex: 1;
+            min-width: 0;
+            padding: 12px 14px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 16px;
+            outline: none;
+            transition: border-color 0.2s;
+            min-height: 48px;
+        }
+        .todo-input:focus { border-color: var(--blue); }
+
+        .todo-priority-select {
+            padding: 10px 6px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 14px;
+            outline: none;
+            width: 62px;
+            flex-shrink: 0;
+        }
+
+        .todo-list { max-height: 260px; overflow-y: auto; }
+
+        .todo-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 4px;
+            border-bottom: 1px dashed #f1f3f4;
+            font-size: 15px;
+            gap: 8px;
+        }
+        .todo-item:last-child { border-bottom: none; }
+
+        .todo-left { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
+        .todo-text { flex: 1; word-break: break-word; }
+        .todo-text.done { text-decoration: line-through; color: var(--sub); }
+
+        .priority-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+        .priority-high { background: var(--red); }
+        .priority-mid  { background: var(--yellow); }
+        .priority-low  { background: var(--green); }
+
+        .todo-del {
+            color: var(--sub);
+            cursor: pointer;
+            background: none;
+            border: none;
+            font-size: 16px;
+            padding: 6px 8px;
+            border-radius: 6px;
+            flex-shrink: 0;
+            transition: color 0.2s, background 0.2s;
+            min-width: 44px;
+            min-height: 44px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .todo-del:hover { color: var(--red); background: #fdecea; }
+        .todo-stats { font-size: 13px; color: var(--sub); margin-top: 8px; text-align: right; }
+
+        /* ══════════════════════════════
+           NEWS
+        ══════════════════════════════ */
+        .news-node { font-size: 15px; line-height: 1.6; border-bottom: 1px solid #f1f3f4; padding: 12px 0; }
+        .news-node:last-child { border-bottom: none; }
+        .news-node a { color: var(--text); text-decoration: none; display: block; }
+        .news-node a:hover { color: var(--blue); }
+        .news-source { font-size: 13px; color: var(--sub); margin-top: 3px; }
+
+        /* news category tabs */
+        .news-cat-tabs {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+            margin-bottom: 12px;
+        }
+        .news-cat-btn {
+            padding: 6px 12px;
+            font-size: 13px;
+            border-radius: 16px;
+            border: 1px solid var(--border);
+            background: white;
+            color: var(--sub);
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+            min-height: 36px;
+            font-family: inherit;
+        }
+        .news-cat-btn:hover { background: var(--bg); color: var(--text); }
+        .news-cat-btn.active { background: #e8f0fe; color: var(--blue); border-color: transparent; font-weight: 600; }
+
+        /* ══════════════════════════════
+           MODAL
+        ══════════════════════════════ */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.45);
+            z-index: 2000;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+        }
+        .modal-overlay.show { display: flex; }
+
+        .modal-box {
+            background: white;
+            border-radius: var(--radius);
+            padding: 24px;
+            width: 100%;
+            max-width: 480px;
+            box-shadow: 0 10px 36px rgba(0,0,0,0.22);
+        }
+        .modal-box h4 { margin: 0 0 14px; font-size: 18px; }
+        .modal-box p { font-size: 15px; color: var(--sub); margin: 0 0 10px; }
+        .modal-box textarea {
+            width: 100%;
+            height: 100px;
+            font-size: 14px;
+            font-family: monospace;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 10px;
+            resize: vertical;
+        }
+        .modal-actions { display: flex; gap: 8px; margin-top: 14px; justify-content: flex-end; flex-wrap: wrap; }
+
+        /* ══════════════════════════════
+           TOAST
+        ══════════════════════════════ */
+        .toast {
+            position: fixed;
+            bottom: 90px;
+            left: 50%;
+            transform: translateX(-50%) translateY(80px);
+            background: #323232;
+            color: white;
+            padding: 14px 24px;
+            border-radius: 10px;
+            font-size: 16px;
+            z-index: 9999;
+            transition: transform 0.3s ease;
+            box-shadow: 0 4px 14px rgba(0,0,0,0.3);
+            white-space: nowrap;
+        }
+        .toast.show { transform: translateX(-50%) translateY(0); }
+
+        /* ══════════════════════════════
+           MOBILE NAV (bottom)
+        ══════════════════════════════ */
+        .mobile-nav {
+            display: none;
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: white;
+            border-top: 1px solid var(--border);
+            z-index: 500;
+            padding: 6px 0 env(safe-area-inset-bottom, 8px);
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+        }
+
+        .mobile-nav-inner { display: flex; justify-content: space-around; }
+
+        .mobile-nav-btn {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 3px;
+            padding: 8px 14px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: var(--sub);
+            font-size: 13px;
+            font-family: inherit;
+            transition: color 0.2s;
+            min-height: 56px;
+            min-width: 60px;
+        }
+        .mobile-nav-btn .nav-icon { font-size: 24px; line-height: 1; }
+        .mobile-nav-btn.active { color: var(--blue); }
+
+        /* mobile panel visibility */
+        .mobile-panel { display: contents; }
+
+        /* ══════════════════════════════
+           RESPONSIVE ≤ 900px
+        ══════════════════════════════ */
+        @media (max-width: 900px) {
+            .wrapper {
+                grid-template-columns: 1fr;
+                margin: 12px auto;
+                padding: 0 12px;
+                padding-bottom: 80px; /* room for bottom nav */
+            }
+
+            .mobile-nav { display: block; }
+
+            /* Hide panels by default on mobile, show active one */
+            .mobile-panel { display: none; }
+            .mobile-panel.active { display: block; }
+
+            .logo { font-size: 32px; }
+            .search-box { font-size: 16px; } /* prevent iOS zoom */
+            .top-bar { padding: 0 14px; }
+            #geoStatus { max-width: 140px; }
+
+            .add-form { grid-template-columns: 1fr; }
+            .add-form .full-width { grid-column: span 1; }
+            .add-form .form-actions { grid-column: span 1; }
+            #formTitle { grid-column: span 1; }
+
+            .weather-temp { font-size: 58px; }
+            .weather-detail-row { gap: 20px; }
+
+            /* checkbox bigger for touch */
+            input[type="checkbox"] {
+                width: 20px;
+                height: 20px;
+                cursor: pointer;
+            }
+
+            /* Link layout mobile fixes */
+            .link-url { display: none; }
+            .link-actions { flex-direction: row; }
+            .link-desc { font-size: 13px; }
+            .link-meta { margin-top: 6px; gap: 4px; }
+        }
+
+        @media (max-width: 420px) {
+            .quick-engines .engine-btn { padding: 8px 12px; font-size: 13px; }
+            .btn { padding: 10px 14px; font-size: 14px; }
+            .search-hint { font-size: 12px; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- ══ TOP BAR ══ -->
+<div class="top-bar">
+    <div class="top-bar-left">
+        <span id="geoStatus">📍 正在定位...</span>
+        <span id="weatherQuick">🌡️ --°C</span>
+    </div>
+    <div class="top-bar-right">
+        <div>
+            <div class="clock-display" id="liveClock">00:00:00</div>
+            <div class="date-display" id="liveDate">載入中...</div>
+        </div>
+    </div>
+</div>
+
+<!-- ══ MAIN GRID ══ -->
+<div class="wrapper">
+
+    <!-- ══ LEFT COLUMN ══ -->
+    <main class="mobile-panel active" id="panel-main">
+
+        <!-- 搜尋區 -->
+        <div class="search-section">
+            <div class="logo">
+                <span style="color:var(--blue)">M</span><span style="color:var(--red)">y</span><span style="color:var(--yellow)">P</span><span style="color:var(--blue)">o</span><span style="color:var(--green)">r</span><span style="color:var(--red)">t</span>al
+            </div>
+            <div class="search-box-container">
+                <input type="text" id="searchInput" class="search-box"
+                    placeholder="搜尋連結... 或輸入「g 」「yt 」「ai 」快捷跳轉"
+                    oninput="handleSearchInput(this)" onkeydown="handleCommandSearch(event)"
+                    autocomplete="off" autocorrect="off" spellcheck="false">
+                <button class="search-clear-btn" id="searchClearBtn" onclick="clearSearch()">✕</button>
+            </div>
+            <div class="search-hint">💡 「g 關鍵字」→ Google ｜「yt 影片」→ YouTube ｜「ai 問題」→ Claude ｜「wiki 詞條」→ Wikipedia</div>
+            <div class="quick-engines">
+                <button class="engine-btn" onclick="openEngine('https://www.google.com/search?q=','搜尋')">🔵 Google</button>
+                <button class="engine-btn" onclick="openEngine('https://www.youtube.com/results?search_query=','搜尋')">🔴 YouTube</button>
+                <button class="engine-btn" onclick="openEngine('https://claude.ai/new?q=','問 Claude')">🤖 Claude</button>
+                <button class="engine-btn" onclick="openEngine('https://zh.wikipedia.org/w/index.php?search=','查詢')">📖 Wikipedia</button>
+                <button class="engine-btn" onclick="openEngine('https://www.bing.com/search?q=','搜尋')">🔷 Bing</button>
+            </div>
+        </div>
+
+        <!-- 連結管理卡片 -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-header-title">🔗 快捷導航樞紐 <span class="count-badge" id="itemCount">0</span></h3>
+            </div>
+
+            <div class="btn-group">
+                <button class="btn" onclick="exportToExcel()">📤 匯出</button>
+                <button class="btn" onclick="document.getElementById('importFile').click()">📥 匯入</button>
+                <button class="btn btn-success" onclick="openSyncModal()">☁️ 雲端備份</button>
+                <button class="btn btn-danger" onclick="resetToDefault()">🔄 還原預設</button>
+                <input type="file" id="importFile" onchange="importFromExcel(event)" style="display:none" accept=".xlsx,.xls">
+            </div>
+
+            <!-- 新增/編輯面板（預設收合） -->
+            <div class="add-form-toggle-row">
+                <span style="font-size:13px;font-weight:600;color:var(--sub);" id="addFormToggleLabel">➕ 新增/編輯連結</span>
+                <button class="btn" id="addFormToggleBtn" onclick="toggleAddForm()">展開 ▼</button>
+            </div>
+
+            <div class="add-form-panel" id="addFormPanel">
+                <div class="add-form">
+                    <div id="formTitle">➕ 新增連結</div>
+                    <input type="text" id="addName" placeholder="網站名稱（必填）">
+                    <input type="text" id="addUrl" placeholder="網址（必填，含 https://）">
+                    <input type="text" id="addDesc" class="full-width" placeholder="內容描述（選填）">
+                    <div class="form-actions">
+                        <button class="btn btn-danger" id="cancelEditBtn" onclick="cancelEdit()" style="display:none;">❌ 取消編輯</button>
+                        <button class="btn btn-primary" id="submitFormBtn" onclick="submitLinkForm()">✅ 確認新增</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="links-grid" id="linksContainer"></div>
+        </div>
+    </main>
+
+    <!-- ══ RIGHT COLUMN ══ -->
+    <aside class="mobile-panel" id="panel-aside">
+
+        <!-- 天氣 -->
+        <div class="card card-collapsible" id="weatherCard">
+            <div class="card-header" onclick="toggleCard('weatherCard')">
+                <h3 class="card-header-title">🌤️ 當地即時氣象</h3>
+                <span class="card-toggle-icon">▼</span>
+            </div>
+            <div class="card-body">
+                <div class="weather-display">
+                    <div class="weather-temp" id="weatherTemp">--</div>
+                    <div class="weather-desc" id="weatherDesc">自動定位中...</div>
+                    <div class="weather-sub" id="weatherSub"></div>
+                    <div class="weather-detail-row" id="weatherDetails" style="display:none">
+                        <div class="weather-detail-item">體感<span id="weatherFeels">--</span></div>
+                        <div class="weather-detail-item">濕度<span id="weatherHumidity">--</span></div>
+                        <div class="weather-detail-item">風速<span id="weatherWind">--</span></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 待辦清單 -->
+        <div class="card card-collapsible" id="todoCard">
+            <div class="card-header" onclick="toggleCard('todoCard')">
+                <h3 class="card-header-title">✅ 待辦清單</h3>
+                <span class="card-toggle-icon">▼</span>
+            </div>
+            <div class="card-body">
+                <div class="todo-input-wrapper">
+                    <input type="text" id="todoInput" class="todo-input" placeholder="新任務... Enter 送出">
+                    <select id="todoPriority" class="todo-priority-select" title="優先度">
+                        <option value="low">🟢低</option>
+                        <option value="mid" selected>🟡中</option>
+                        <option value="high">🔴高</option>
+                    </select>
+                    <button class="btn btn-primary" onclick="addNewTodoBtn()" style="padding:8px 10px;font-size:13px;flex-shrink:0;">＋</button>
+                </div>
+                <div class="todo-list" id="todoContainer"></div>
+                <div class="todo-stats" id="todoStats"></div>
+            </div>
+        </div>
+
+        <!-- 新聞 -->
+        <div class="card card-collapsible" id="newsCard">
+            <div class="card-header" onclick="toggleCard('newsCard')">
+                <h3 class="card-header-title">📰 新聞資訊中心</h3>
+                <span class="card-toggle-icon">▼</span>
+            </div>
+            <div class="card-body">
+                <div class="news-cat-tabs" id="newsCatTabs">
+                    <button class="news-cat-btn active" onclick="switchNewsCat('world')">🌍 國際</button>
+                    <button class="news-cat-btn" onclick="switchNewsCat('tw')">🇹🇼 台灣</button>
+                    <button class="news-cat-btn" onclick="switchNewsCat('tech')">💻 科技</button>
+                    <button class="news-cat-btn" onclick="switchNewsCat('finance')">💰 財經</button>
+                    <button class="news-cat-btn" onclick="switchNewsCat('sports')">⚽ 運動</button>
+                    <button class="news-cat-btn" onclick="switchNewsCat('life')">🏠 生活</button>
+                </div>
+                <div id="newsContainer" style="color:var(--sub);font-size:14px;padding:8px 0;">載入中...</div>
+            </div>
+        </div>
+
+    </aside>
+</div>
+
+<!-- ══ MOBILE BOTTOM NAV ══ -->
+<nav class="mobile-nav">
+    <div class="mobile-nav-inner">
+        <button class="mobile-nav-btn active" id="nav-main" onclick="switchPanel('main')">
+            <span class="nav-icon">🔗</span>連結
+        </button>
+        <button class="mobile-nav-btn" id="nav-aside" onclick="switchPanel('aside')">
+            <span class="nav-icon">☀️</span>資訊
+        </button>
+    </div>
+</nav>
+
+<!-- ══ SYNC MODAL ══ -->
+<div class="modal-overlay" id="syncModal">
+    <div class="modal-box">
+        <h4>☁️ 雲端備份 / 還原</h4>
+        <p>複製下方代碼儲存至雲端。還原時清除後貼上舊代碼再按「匯入還原」。</p>
+        <textarea id="syncTextarea" onclick="this.select()"></textarea>
+        <div class="modal-actions">
+            <button class="btn" onclick="copySyncData()">📋 複製代碼</button>
+            <button class="btn btn-success" onclick="restoreFromModal()">📥 匯入還原</button>
+            <button class="btn btn-danger" onclick="closeSyncModal()">關閉</button>
+        </div>
+    </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ══════════════════════════════════════════════
+// DATA
+// ══════════════════════════════════════════════
+const STORAGE_LINKS = 'portal_links_v3';
+const STORAGE_TODOS = 'portal_todos_v3';
+
+const defaultDataSeed = [
+    // 生活服務
+    { name:"台鐵時刻查詢", url:"https://tip.railway.gov.tw", desc:"全台列車時刻表、票價查詢與即時網路訂票服務。", category:"Life", fav:true },
+    { name:"高鐵訂票系統", url:"https://www.thsrc.com.tw", desc:"台灣高速鐵路官方訂票、時刻查詢與會員服務。", category:"Life", fav:false },
+    { name:"公車動態系統", url:"https://ebus.gov.taipei", desc:"大台北地區及全台主要縣市公車即時到站動態。", category:"Life", fav:false },
+    { name:"統一發票對獎", url:"https://invoice.etax.nat.gov.tw", desc:"財政部統一發票開獎號碼、中獎清單與對獎工具。", category:"Life", fav:false },
+    { name:"威力彩/大樂透", url:"https://www.taiwanlottery.com.tw", desc:"台灣彩券官網，最新開獎號碼與歷史查詢。", category:"Life", fav:false },
+    { name:"Yahoo 電影時刻", url:"https://movies.yahoo.com.tw", desc:"最新上映電影、戲院時刻表及網友影評。", category:"Life", fav:false },
+    { name:"國道即時路況", url:"https://1968.freeway.gov.tw", desc:"高速公路局即時路況、壅塞回堵與攝影機影像。", category:"Life", fav:true },
+    { name:"台電停電查詢", url:"https://www.taipower.com.tw", desc:"查詢計畫停電時間、緊急停電通報與電費試算。", category:"Life", fav:false },
+    { name:"健保快易通", url:"https://eservice.nhi.gov.tw", desc:"個人健保就醫紀錄、就醫流向查詢與用藥紀錄。", category:"Life", fav:false },
+    { name:"郵局全球資訊網", url:"https://www.post.gov.tw", desc:"郵件追蹤、包裹查詢、郵局據點與金融服務。", category:"Life", fav:false },
+    // 搜尋引擎
+    { name:"Google", url:"https://www.google.com", desc:"全球市佔率最高的搜尋引擎，提供全方位檢索技術。", category:"Search", fav:true },
+    { name:"Bing", url:"https://www.bing.com", desc:"微軟推出的搜尋引擎，深度整合 Copilot AI 智慧問答。", category:"Search", fav:false },
+    { name:"DuckDuckGo", url:"https://duckduckgo.com", desc:"注重隱私的搜尋引擎，不追蹤使用者行為。", category:"Search", fav:false },
+    { name:"Perplexity AI", url:"https://www.perplexity.ai", desc:"AI 驅動的搜尋引擎，直接給出附有來源的摘要答案。", category:"Search", fav:false },
+    // AI 工具
+    { name:"ChatGPT", url:"https://chatgpt.com", desc:"OpenAI 開發的對話式 AI，支援寫作、程式與多元分析。", category:"AI", fav:true },
+    { name:"Claude", url:"https://claude.ai", desc:"Anthropic 開發的高智慧模型，長文本分析與程式碼實力卓越。", category:"AI", fav:true },
+    { name:"Gemini", url:"https://gemini.google.com", desc:"Google 旗下多模態 AI，深度串聯 Google 生態系。", category:"AI", fav:false },
+    { name:"Grok", url:"https://grok.com", desc:"xAI 開發的 AI 助理，可即時存取 X 平台動態資訊。", category:"AI", fav:false },
+    { name:"Midjourney", url:"https://www.midjourney.com", desc:"頂尖 AI 圖像生成工具，擅長藝術風格高質感圖像創作。", category:"AI", fav:false },
+    { name:"NotebookLM", url:"https://notebooklm.google.com", desc:"Google 出品 AI 筆記本，上傳文件後以 AI 輔助理解與問答。", category:"AI", fav:false },
+    { name:"Suno AI", url:"https://suno.com", desc:"AI 音樂生成平台，輸入歌詞與風格即可自動生成完整歌曲。", category:"AI", fav:false },
+    // 新聞媒體
+    { name:"聯合新聞網", url:"https://udn.com", desc:"台灣聯合報系旗下新聞網站，即時政治、社會、財經報導。", category:"News", fav:false },
+    { name:"自由時報", url:"https://www.ltn.com.tw", desc:"自由時報集團電子新聞，涵蓋政治、生活、娛樂各類新聞。", category:"News", fav:false },
+    { name:"天下雜誌", url:"https://www.cw.com.tw", desc:"深度財經、社會與趨勢報導，台灣最具影響力雜誌之一。", category:"News", fav:false },
+    { name:"BBC 中文網", url:"https://www.bbc.com/zhongwen/trad", desc:"BBC 繁體中文版，提供全球重大新聞的中文即時報導。", category:"News", fav:false },
+    { name:"Reuters", url:"https://www.reuters.com", desc:"全球最大新聞通訊社，提供財經、政治、科技英文即時新聞。", category:"News", fav:false },
+    // 運動體育
+    { name:"中華職棒 CPBL", url:"https://www.cpbl.com.tw", desc:"中華職棒大聯盟官方網站，賽程、戰績、球員數據與轉播資訊。", category:"Sports", fav:false },
+    { name:"NBA 官方網站", url:"https://www.nba.com", desc:"美國職業籃球聯盟官方，賽事直播、球員數據與精彩影片。", category:"Sports", fav:false },
+    { name:"ESPN 台灣", url:"https://www.espn.com", desc:"全球最大體育媒體，提供各項運動即時比分與深度報導。", category:"Sports", fav:false },
+    { name:"Transfermarkt", url:"https://www.transfermarkt.com", desc:"足球球員身價資料庫、轉會動態與球隊陣容詳細統計。", category:"Sports", fav:false },
+    { name:"Strava", url:"https://www.strava.com", desc:"跑步、騎車、游泳等運動紀錄與社群分享平台。", category:"Sports", fav:false },
+    { name:"中華奧林匹克委員會", url:"https://www.tpenoc.net", desc:"台灣奧委會官網，國際賽事資訊、國手動態與體育政策。", category:"Sports", fav:false },
+    // 地方資訊
+    { name:"高雄市政府", url:"https://www.kcg.gov.tw", desc:"高雄市官方網站，市政公告、服務申辦與生活資訊。", category:"Local", fav:true },
+    { name:"台南市政府", url:"https://www.tainan.gov.tw", desc:"台南市官方入口，市政新聞、觀光與在地服務資訊。", category:"Local", fav:false },
+    { name:"屏東縣政府", url:"https://www.pthg.gov.tw", desc:"屏東縣政府官網，縣政公告與民眾服務申辦入口。", category:"Local", fav:false },
+    { name:"觀光署 - 台灣觀光", url:"https://www.taiwan.net.tw", desc:"交通部觀光署官方旅遊資訊，景點、活動與旅遊地圖。", category:"Local", fav:false },
+    { name:"內政部不動產資訊平台", url:"https://pip.moi.gov.tw", desc:"全台房地產交易實價登錄查詢、行情分析與地段查詢。", category:"Local", fav:false },
+    { name:"Google Maps", url:"https://maps.google.com", desc:"Google 地圖，提供導航、街景、商家評論與即時路況。", category:"Local", fav:true },
+    // 科技數位
+    { name:"GitHub", url:"https://github.com", desc:"全球最大程式碼托管平台，開源專案協作與版本控制。", category:"Tech", fav:true },
+    { name:"Stack Overflow", url:"https://stackoverflow.com", desc:"全球最大程式設計問答社群，解決各種技術開發問題。", category:"Tech", fav:false },
+    { name:"MDN Web Docs", url:"https://developer.mozilla.org/zh-TW", desc:"Mozilla 官方網頁技術文件，HTML、CSS、JavaScript 最完整參考。", category:"Tech", fav:false },
+    { name:"HackerNews", url:"https://news.ycombinator.com", desc:"Y Combinator 旗下科技新聞社群，聚焦新創、程式與科技趨勢。", category:"Tech", fav:false },
+    { name:"TechCrunch", url:"https://techcrunch.com", desc:"全球頂尖科技媒體，報導新創融資、產品發布與數位趨勢。", category:"Tech", fav:false },
+    { name:"iThome", url:"https://www.ithome.com.tw", desc:"台灣 IT 媒體龍頭，資安、雲端、AI 與軟體開發深度報導。", category:"Tech", fav:false },
+    { name:"Product Hunt", url:"https://www.producthunt.com", desc:"每日新創產品發布社群，發掘最新 App、工具與服務。", category:"Tech", fav:false },
+    // 財經投資
+    { name:"台灣證券交易所", url:"https://www.twse.com.tw", desc:"上市股票即時行情、成交量、公司公告與財務報表查詢。", category:"Finance", fav:false },
+    { name:"台灣期貨交易所", url:"https://www.taifex.com.tw", desc:"期貨、選擇權、ETF 相關契約資訊與即時報價查詢。", category:"Finance", fav:false },
+    { name:"Yahoo 股市", url:"https://tw.stock.yahoo.com", desc:"台股、美股即時報價、技術圖表與財經新聞整合平台。", category:"Finance", fav:true },
+    { name:"Investing.com", url:"https://tw.investing.com", desc:"全球金融市場行情、外匯、商品、加密貨幣與財經日曆。", category:"Finance", fav:false },
+    { name:"財報狗", url:"https://statementdog.com", desc:"台股財務報表分析平台，EPS、本益比、殖利率視覺化工具。", category:"Finance", fav:false },
+    { name:"CoinMarketCap", url:"https://coinmarketcap.com", desc:"加密貨幣市值排行、即時幣價、交易量與歷史圖表。", category:"Finance", fav:false },
+    { name:"MoneyDJ 理財網", url:"https://www.moneydj.com", desc:"台灣財經資訊平台，基金、股票、債券與退休規劃工具。", category:"Finance", fav:false },
+    // 藝術設計
+    { name:"Behance", url:"https://www.behance.net", desc:"Adobe 旗下全球最大設計作品集社群，平面、UI、插畫展示。", category:"Art", fav:false },
+    { name:"Dribbble", url:"https://dribbble.com", desc:"設計師作品分享社群，UI/UX、品牌識別與動態設計靈感來源。", category:"Art", fav:false },
+    { name:"Unsplash", url:"https://unsplash.com", desc:"高畫質免費商用圖庫，收錄超過 300 萬張頂尖攝影作品。", category:"Art", fav:false },
+    { name:"Figma", url:"https://www.figma.com", desc:"業界主流 UI/UX 協作設計工具，支援即時多人同步編輯。", category:"Art", fav:true },
+    { name:"故宮博物院", url:"https://www.npm.gov.tw", desc:"國立故宮博物院官網，典藏查詢、線上展覽與文化研究資源。", category:"Art", fav:false },
+    { name:"Artsy", url:"https://www.artsy.net", desc:"全球藝術品交易與展覽資訊平台，涵蓋當代藝術家與畫廊。", category:"Art", fav:false },
+    { name:"DeviantArt", url:"https://www.deviantart.com", desc:"全球最大數位藝術社群，涵蓋插畫、繪畫、攝影與 Fan Art。", category:"Art", fav:false },
+    // 文學閱讀
+    { name:"Project Gutenberg", url:"https://www.gutenberg.org", desc:"免費提供超過 7 萬部公共版權電子書，古典文學首選資源。", category:"Literature", fav:false },
+    { name:"Readmoo 讀墨", url:"https://readmoo.com", desc:"台灣最大繁體中文電子書平台，小說、散文、商業書全覆蓋。", category:"Literature", fav:false },
+    { name:"Goodreads", url:"https://www.goodreads.com", desc:"全球最大讀書社群，書評、書單推薦與閱讀進度追蹤。", category:"Literature", fav:false },
+    { name:"博客來", url:"https://www.books.com.tw", desc:"台灣最大網路書店，實體書、電子書、文具與影音商品。", category:"Literature", fav:false },
+    { name:"Z-Library", url:"https://z-lib.id", desc:"全球最大免費電子書與學術論文資料庫（請注意版權規範）。", category:"Literature", fav:false },
+    { name:"方格子 vocus", url:"https://vocus.cc", desc:"台灣訂閱制創作平台，散文、小說、評論的中文創作社群。", category:"Literature", fav:false },
+    // 學術研究
+    { name:"Google Scholar", url:"https://scholar.google.com", desc:"Google 學術搜尋，免費查詢全球學術論文、書籍與引用次數。", category:"Academic", fav:true },
+    { name:"arXiv", url:"https://arxiv.org", desc:"全球最大預印本論文庫，涵蓋物理、數學、電腦科學與 AI。", category:"Academic", fav:false },
+    { name:"PubMed", url:"https://pubmed.ncbi.nlm.nih.gov", desc:"美國國家醫學圖書館，生醫與臨床研究論文全文資料庫。", category:"Academic", fav:false },
+    { name:"台灣學術電子書", url:"https://www.airiti.com", desc:"華藝線上圖書館，台灣與華文學術期刊、論文全文檢索。", category:"Academic", fav:false },
+    { name:"JSTOR", url:"https://www.jstor.org", desc:"人文社科學術期刊數位資料庫，提供超過 2,000 種期刊。", category:"Academic", fav:false },
+    { name:"Semantic Scholar", url:"https://www.semanticscholar.org", desc:"AI 輔助學術搜尋引擎，提供論文摘要、引用關係圖與推薦。", category:"Academic", fav:false },
+    { name:"國家圖書館", url:"https://www.ncl.edu.tw", desc:"台灣國家圖書館，書目查詢、電子資源與文化部典藏資料。", category:"Academic", fav:false },
+    // 工作效率
+    { name:"Notion", url:"https://www.notion.so", desc:"All-in-one 工作區，筆記、資料庫、專案管理一體整合。", category:"Work", fav:true },
+    { name:"Google Drive", url:"https://drive.google.com", desc:"Google 雲端硬碟，文件、試算表、簡報協作與 15GB 免費空間。", category:"Work", fav:true },
+    { name:"Trello", url:"https://trello.com", desc:"看板式專案管理工具，直覺拖曳管理任務流程與團隊協作。", category:"Work", fav:false },
+    { name:"Canva", url:"https://www.canva.com", desc:"線上平面設計工具，海報、簡報、社群素材快速製作。", category:"Work", fav:false },
+    { name:"Zoom", url:"https://zoom.us", desc:"企業級視訊會議平台，支援大型線上研討會與虛擬辦公室。", category:"Work", fav:false },
+];
+
+let userLinks = (() => {
+    try { return JSON.parse(localStorage.getItem(STORAGE_LINKS)) || [...defaultDataSeed]; }
+    catch { return [...defaultDataSeed]; }
+})();
+
+let userTodos = (() => {
+    try { return JSON.parse(localStorage.getItem(STORAGE_TODOS)) || [{ text:"歡迎使用 MyPortal！", priority:"low", done:false }]; }
+    catch { return []; }
+})();
+
+let editingIndex = null;
+let addFormOpen = false;
+
+// ══════════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════════
+window.addEventListener('DOMContentLoaded', () => {
+    startClock();
+    triggerAutoLocation();
+    renderLinks();
+    renderTodos();
+    fetchNews();
+    document.getElementById('todoInput').addEventListener('keydown', e => {
+        if (e.key === 'Enter') addNewTodoBtn();
+    });
+});
+
+// ══════════════════════════════════════════════
+// MOBILE PANEL SWITCH
+// ══════════════════════════════════════════════
+function switchPanel(name) {
+    document.querySelectorAll('.mobile-panel').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.mobile-nav-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById('panel-' + name).classList.add('active');
+    document.getElementById('nav-' + name).classList.add('active');
+}
+
+// ══════════════════════════════════════════════
+// COLLAPSIBLE CARDS
+// ══════════════════════════════════════════════
+function toggleCard(id) {
+    document.getElementById(id).classList.toggle('collapsed');
+}
+
+// ══════════════════════════════════════════════
+// ADD FORM TOGGLE
+// ══════════════════════════════════════════════
+function toggleAddForm(forceOpen) {
+    const panel = document.getElementById('addFormPanel');
+    const btn = document.getElementById('addFormToggleBtn');
+    addFormOpen = forceOpen !== undefined ? forceOpen : !addFormOpen;
+    if (addFormOpen) {
+        panel.classList.add('open');
+        btn.textContent = '收合 ▲';
+    } else {
+        panel.classList.remove('open');
+        btn.textContent = '展開 ▼';
+    }
+}
+
+// ══════════════════════════════════════════════
+// CLOCK
+// ══════════════════════════════════════════════
+function startClock() {
+    const weekDays = ['日','一','二','三','四','五','六'];
+    function update() {
+        const now = new Date();
+        document.getElementById('liveClock').textContent =
+            now.toLocaleTimeString('zh-TW', { hour12: false });
+        document.getElementById('liveDate').textContent =
+            `${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}/${String(now.getDate()).padStart(2,'0')} 週${weekDays[now.getDay()]}`;
+    }
+    update();
+    setInterval(update, 1000);
+}
+
+// ══════════════════════════════════════════════
+// GEO + WEATHER
+// ══════════════════════════════════════════════
+function triggerAutoLocation() {
+    if (!navigator.geolocation) {
+        document.getElementById('geoStatus').textContent = '⚠️ 瀏覽器不支援定位';
+        fetchWeather(22.6273, 120.3014);
+        return;
+    }
+    navigator.geolocation.getCurrentPosition(
+        pos => {
+            document.getElementById('geoStatus').textContent = '📍 定位成功';
+            fetchWeather(pos.coords.latitude.toFixed(4), pos.coords.longitude.toFixed(4));
+        },
+        () => {
+            document.getElementById('geoStatus').textContent = '⚠️ 使用預設座標（高雄）';
+            fetchWeather(22.6273, 120.3014);
+        },
+        { timeout: 8000 }
+    );
+}
+
+const WMO = {
+    0:'☀️ 晴天',1:'🌤️ 大致晴',2:'⛅ 多雲',3:'☁️ 陰天',
+    45:'🌫️ 霧',48:'🌫️ 凍霧',
+    51:'🌦️ 毛毛雨',53:'🌦️ 毛毛雨',55:'🌧️ 毛毛雨',
+    61:'🌧️ 小雨',63:'🌧️ 中雨',65:'🌧️ 大雨',
+    71:'❄️ 小雪',73:'❄️ 中雪',75:'❄️ 大雪',
+    80:'🌦️ 陣雨',81:'🌧️ 陣雨',82:'⛈️ 大陣雨',
+    95:'⛈️ 雷陣雨',96:'⛈️ 雷陣雨夾冰雹',99:'⛈️ 雷陣雨夾冰雹'
+};
+
+async function fetchWeather(lat, lon) {
+    try {
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
+            `&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,weather_code&timezone=Asia/Taipei`;
+        const d = await fetch(url).then(r => r.json());
+        if (!d?.current) throw 0;
+        const c = d.current;
+        const desc = WMO[c.weather_code] || '🌡️ 即時氣象';
+        const t = Math.round(c.temperature_2m);
+        document.getElementById('weatherTemp').textContent = `${t}°C`;
+        document.getElementById('weatherDesc').textContent = desc;
+        document.getElementById('weatherSub').textContent = `緯度 ${lat}  經度 ${lon}`;
+        document.getElementById('weatherFeels').textContent = `${Math.round(c.apparent_temperature)}°C`;
+        document.getElementById('weatherHumidity').textContent = `${c.relative_humidity_2m}%`;
+        document.getElementById('weatherWind').textContent = `${c.wind_speed_10m} km/h`;
+        document.getElementById('weatherDetails').style.display = 'flex';
+        document.getElementById('weatherQuick').textContent = `${desc} ${t}°C`;
+    } catch {
+        document.getElementById('weatherDesc').textContent = '⚠️ 天氣資料載入失敗';
+    }
+}
+
+// ══════════════════════════════════════════════
+// SEARCH
+// ══════════════════════════════════════════════
+function handleSearchInput(el) {
+    document.getElementById('searchClearBtn').style.display = el.value ? 'block' : 'none';
+    renderLinks();
+}
+
+function clearSearch() {
+    const inp = document.getElementById('searchInput');
+    inp.value = '';
+    document.getElementById('searchClearBtn').style.display = 'none';
+    inp.focus();
+    renderLinks();
+}
+
+function openEngine(baseUrl, label) {
+    const q = document.getElementById('searchInput').value.trim();
+    if (!q) { showToast(`請先輸入要${label}的關鍵字`); return; }
+    window.open(baseUrl + encodeURIComponent(q), '_blank');
+}
+
+function handleCommandSearch(e) {
+    if (e.key !== 'Enter') return;
+    const val = e.target.value.trim();
+    const map = {
+        'g ':'https://www.google.com/search?q=',
+        'yt ':'https://www.youtube.com/results?search_query=',
+        'ai ':'https://claude.ai/new?q=',
+        'wiki ':'https://zh.wikipedia.org/w/index.php?search=',
+        'b ':'https://www.bing.com/search?q=',
+        'gh ':'https://github.com/search?q=',
+    };
+    for (const [prefix, url] of Object.entries(map)) {
+        if (val.toLowerCase().startsWith(prefix)) {
+            window.open(url + encodeURIComponent(val.slice(prefix.length).trim()), '_blank');
+            return;
+        }
+    }
+}
+
+// ══════════════════════════════════════════════
+// RENDER LINKS
+// ══════════════════════════════════════════════
+function renderLinks() {
+    const q = document.getElementById('searchInput').value.toLowerCase().trim();
+    const filtered = userLinks.filter(item =>
+        !q || item.name.toLowerCase().includes(q) ||
+        (item.desc||'').toLowerCase().includes(q) ||
+        (item.url||'').toLowerCase().includes(q)
+    );
+
+    const c = document.getElementById('linksContainer');
+    if (!filtered.length) {
+        c.innerHTML = `<div class="empty-hint">😢 沒有符合條件的連結。<br><small style="color:#aaa">清除搜尋條件試試。</small></div>`;
+    } else {
+        c.innerHTML = filtered.map(item => {
+            const idx = userLinks.indexOf(item);
+            const fav = `https://www.google.com/s2/favicons?domain=${encodeURIComponent(item.url)}&sz=32`;
+            return `<div class="link-item">
+                <div class="link-content">
+                    <div class="link-item-header">
+                        <span class="fav-icon${item.fav?' active':''}" onclick="toggleFav(${idx})" title="${item.fav?'取消最愛':'加入最愛'}">★</span>
+                        <img class="link-favicon" src="${fav}" onerror="this.style.display='none'" alt="">
+                        <a href="${item.url}" target="_blank" class="link-title" title="${item.url}">${esc(item.name)}</a>
+                    </div>
+                    <div class="link-meta">
+                        <div class="link-url">${esc(item.url)}</div>
+                        ${item.desc?`<div class="link-desc">${esc(item.desc)}</div>`:''}
+                    </div>
+                </div>
+                <div class="link-actions">
+                    <button class="btn-icon" onclick="editLink(${idx})" title="編輯">✏️</button>
+                    <button class="btn-icon" onclick="deleteLink(${idx})" title="刪除">🗑️</button>
+                </div>
+            </div>`;
+        }).join('');
+    }
+    document.getElementById('itemCount').textContent = filtered.length;
+    saveLinks();
+}
+
+function esc(s) {
+    return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function saveLinks() { localStorage.setItem(STORAGE_LINKS, JSON.stringify(userLinks)); }
+
+// ══════════════════════════════════════════════
+// CRUD
+// ══════════════════════════════════════════════
+function submitLinkForm() {
+    const name = document.getElementById('addName').value.trim();
+    let url = document.getElementById('addUrl').value.trim();
+    const desc = document.getElementById('addDesc').value.trim();
+
+    if (!name || !url) { showToast('⚠️ 請填寫名稱與網址'); return; }
+    if (!url.startsWith('http')) url = 'https://' + url;
+
+    if (editingIndex !== null) {
+        userLinks[editingIndex] = { ...userLinks[editingIndex], name, url, desc };
+        showToast('✅ 連結已更新');
+        cancelEdit();
+    } else {
+        userLinks.push({ name, url, desc, fav: false });
+        showToast('✅ 連結已新增');
+        document.getElementById('addName').value = '';
+        document.getElementById('addUrl').value = '';
+        document.getElementById('addDesc').value = '';
+    }
+    renderLinks();
+}
+
+function editLink(idx) {
+    const item = userLinks[idx];
+    editingIndex = idx;
+    document.getElementById('addName').value = item.name;
+    document.getElementById('addUrl').value = item.url;
+    document.getElementById('addDesc').value = item.desc || '';
+    document.getElementById('formTitle').textContent = '✏️ 編輯連結中';
+    document.getElementById('submitFormBtn').textContent = '💾 儲存變更';
+    document.getElementById('cancelEditBtn').style.display = 'inline-flex';
+    toggleAddForm(true);
+    document.getElementById('addFormPanel').scrollIntoView({ behavior:'smooth', block:'nearest' });
+}
+
+function cancelEdit() {
+    editingIndex = null;
+    ['addName','addUrl','addDesc'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('formTitle').textContent = '➕ 新增連結';
+    document.getElementById('submitFormBtn').textContent = '✅ 確認新增';
+    document.getElementById('cancelEditBtn').style.display = 'none';
+}
+
+function deleteLink(idx) {
+    if (confirm(`確定要刪除「${userLinks[idx].name}」嗎？`)) {
+        userLinks.splice(idx, 1);
+        renderLinks();
+        showToast('🗑️ 已刪除');
+    }
+}
+
+function toggleFav(idx) {
+    userLinks[idx].fav = !userLinks[idx].fav;
+    renderLinks();
+}
+
+function resetToDefault() {
+    if (confirm('確定要還原所有連結為初始預設嗎？您自行新增的連結將會消失。')) {
+        userLinks = [...defaultDataSeed];
+        cancelEdit();
+        renderLinks();
+        showToast('🔄 已還原為預設值');
+    }
+}
+
+// ══════════════════════════════════════════════
+// EXCEL
+// ══════════════════════════════════════════════
+function exportToExcel() {
+    const data = userLinks.map(({ name, url, desc, fav }) =>
+        ({ '網站名稱':name, '網址連結':url, '內容描述':desc||'', '最愛':fav?'Y':'N' }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), 'Links');
+    XLSX.writeFile(wb, 'MyPortal_Backup.xlsx');
+    showToast('📤 已匯出 Excel');
+}
+
+function importFromExcel(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+        try {
+            const wb = XLSX.read(new Uint8Array(ev.target.result), { type:'array' });
+            const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+            if (!rows.length) { showToast('⚠️ 無資料'); return; }
+            userLinks = rows.map(r => ({
+                name: r['網站名稱']||'未命名',
+                url: r['網址連結']||'#',
+                desc: r['內容描述']||'',
+                fav: r['最愛']==='Y'
+            }));
+            renderLinks();
+            showToast(`🎉 匯入 ${rows.length} 筆`);
+        } catch { showToast('❌ 讀取失敗'); }
+    };
+    reader.readAsArrayBuffer(file);
+    e.target.value = '';
+}
+
+// ══════════════════════════════════════════════
+// SYNC MODAL
+// ══════════════════════════════════════════════
+function openSyncModal() {
+    document.getElementById('syncTextarea').value = JSON.stringify(userLinks);
+    document.getElementById('syncModal').classList.add('show');
+}
+function closeSyncModal() { document.getElementById('syncModal').classList.remove('show'); }
+
+function copySyncData() {
+    const ta = document.getElementById('syncTextarea');
+    ta.select();
+    navigator.clipboard?.writeText(ta.value)
+        .then(() => showToast('📋 已複製！'))
+        .catch(() => showToast('請手動複製'));
+}
+
+function restoreFromModal() {
+    try {
+        const parsed = JSON.parse(document.getElementById('syncTextarea').value.trim());
+        if (!Array.isArray(parsed) || !parsed.length) throw 0;
+        userLinks = parsed.map(i => ({ name:i.name||'未命名', url:i.url||'#', desc:i.desc||'', fav:!!i.fav }));
+        renderLinks();
+        closeSyncModal();
+        showToast(`✅ 還原成功，共 ${userLinks.length} 筆`);
+    } catch { showToast('❌ 還原失敗：格式錯誤'); }
+}
+
+// ══════════════════════════════════════════════
+// TODO
+// ══════════════════════════════════════════════
+function addNewTodoBtn() {
+    const inp = document.getElementById('todoInput');
+    const text = inp.value.trim();
+    if (!text) return;
+    userTodos.unshift({ text, priority: document.getElementById('todoPriority').value, done: false });
+    inp.value = '';
+    saveTodos(); renderTodos();
+}
+
+function renderTodos() {
+    const sorted = [...userTodos].sort((a,b) => {
+        if (a.done !== b.done) return a.done ? 1 : -1;
+        return ({'high':0,'mid':1,'low':2}[a.priority]||1) - ({'high':0,'mid':1,'low':2}[b.priority]||1);
+    });
+    const c = document.getElementById('todoContainer');
+    c.innerHTML = sorted.length
+        ? sorted.map(todo => {
+            const ri = userTodos.indexOf(todo);
+            return `<div class="todo-item">
+                <div class="todo-left">
+                    <input type="checkbox" ${todo.done?'checked':''} onchange="toggleTodo(${ri})">
+                    <span class="priority-dot priority-${todo.priority||'low'}"></span>
+                    <span class="todo-text${todo.done?' done':''}">${esc(todo.text)}</span>
+                </div>
+                <button class="todo-del" onclick="deleteTodo(${ri})">✕</button>
+            </div>`;
+        }).join('')
+        : `<div style="color:var(--sub);font-size:12px;text-align:center;padding:12px">目前無任何待辦任務。</div>`;
+
+    const done = userTodos.filter(t=>t.done).length;
+    const total = userTodos.length;
+    document.getElementById('todoStats').textContent = total ? `已完成 ${done} / ${total} 項` : '';
+}
+
+function toggleTodo(idx) { userTodos[idx].done = !userTodos[idx].done; saveTodos(); renderTodos(); }
+function deleteTodo(idx) { userTodos.splice(idx,1); saveTodos(); renderTodos(); }
+function saveTodos() { localStorage.setItem(STORAGE_TODOS, JSON.stringify(userTodos)); }
+
+// ══════════════════════════════════════════════
+// NEWS (multi-category)
+// ══════════════════════════════════════════════
+const NEWS_FEEDS = {
+    world:   'https://news.google.com/rss/headlines/section/topic/WORLD?hl=zh-TW&gl=TW&ceid=TW:zh-Hant',
+    tw:      'https://news.google.com/rss/headlines/section/geo/Taiwan?hl=zh-TW&gl=TW&ceid=TW:zh-Hant',
+    tech:    'https://news.google.com/rss/headlines/section/topic/TECHNOLOGY?hl=zh-TW&gl=TW&ceid=TW:zh-Hant',
+    finance: 'https://news.google.com/rss/headlines/section/topic/BUSINESS?hl=zh-TW&gl=TW&ceid=TW:zh-Hant',
+    sports:  'https://news.google.com/rss/headlines/section/topic/SPORTS?hl=zh-TW&gl=TW&ceid=TW:zh-Hant',
+    life:    'https://news.google.com/rss/headlines/section/topic/HEALTH?hl=zh-TW&gl=TW&ceid=TW:zh-Hant',
+};
+const newsCache = {};
+let activeNewsCat = 'world';
+
+function switchNewsCat(cat) {
+    activeNewsCat = cat;
+    document.querySelectorAll('.news-cat-btn').forEach(b => b.classList.remove('active'));
+    event.target.classList.add('active');
+    fetchNews(cat);
+}
+
+async function fetchNews(cat) {
+    cat = cat || activeNewsCat;
+    const el = document.getElementById('newsContainer');
+    if (newsCache[cat]) { el.innerHTML = newsCache[cat]; return; }
+    el.innerHTML = `<div style="color:var(--sub);text-align:center;padding:14px 0">載入中...</div>`;
+    const proxy = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(NEWS_FEEDS[cat])}`;
+    try {
+        const res = await fetch(proxy);
+        if (!res.ok) throw 0;
+        const d = await res.json();
+        if (!d?.items?.length) throw 0;
+        const html = d.items.slice(0, 8).map(item =>
+            `<div class="news-node">
+                <a href="${item.link}" target="_blank" rel="noopener">📰 ${esc(item.title)}</a>
+                ${item.author ? `<div class="news-source">📡 ${esc(item.author)}</div>` : ''}
+            </div>`).join('');
+        newsCache[cat] = html;
+        el.innerHTML = html;
+    } catch {
+        el.innerHTML = `<div style="color:var(--sub);font-size:13px;text-align:center;padding:14px 0">
+            ⚠️ 新聞載入失敗<br>
+            <button class="btn" style="margin-top:8px" onclick="delete newsCache['${cat}'];fetchNews('${cat}')">🔄 重新載入</button>
+        </div>`;
+    }
+}
+
+// ══════════════════════════════════════════════
+// TOAST
+// ══════════════════════════════════════════════
+let _toastT = null;
+function showToast(msg, ms=2500) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    clearTimeout(_toastT);
+    _toastT = setTimeout(() => el.classList.remove('show'), ms);
+}
+</script>
+</body>
+</html>
