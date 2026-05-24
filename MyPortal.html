@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
     <title>MyPortal 智慧生產力入口</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
     <style>
         :root {
             --blue: #4285F4;
@@ -728,6 +729,7 @@
         <span id="weatherQuick">🌡️ --°C</span>
     </div>
     <div class="top-bar-right">
+        <div id="driveStatus" style="font-size:13px;opacity:0.85;cursor:pointer;white-space:nowrap;padding:4px 8px;border-radius:6px;border:1px solid rgba(255,255,255,0.3);" onclick="handleDriveAuth()" title="點擊連接 Google Drive 自動備份">☁️ 未連線</div>
         <div>
             <div class="clock-display" id="liveClock">00:00:00</div>
             <div class="date-display" id="liveDate">載入中...</div>
@@ -878,16 +880,35 @@
     </div>
 </nav>
 
-<!-- ══ SYNC MODAL ══ -->
+<!-- ══ DRIVE SYNC MODAL ══ -->
 <div class="modal-overlay" id="syncModal">
     <div class="modal-box">
-        <h4>☁️ 雲端備份 / 還原</h4>
-        <p>複製下方代碼儲存至雲端。還原時清除後貼上舊代碼再按「匯入還原」。</p>
-        <textarea id="syncTextarea" onclick="this.select()"></textarea>
-        <div class="modal-actions">
-            <button class="btn" onclick="copySyncData()">📋 複製代碼</button>
-            <button class="btn btn-success" onclick="restoreFromModal()">📥 匯入還原</button>
-            <button class="btn btn-danger" onclick="closeSyncModal()">關閉</button>
+        <h4>☁️ Google Drive 自動備份</h4>
+        <div id="driveModalContent">
+            <p style="font-size:15px;color:var(--sub);margin-bottom:16px;">
+                授權後，每次新增或修改連結都會自動同步至你的 Google Drive，換裝置時也能一鍵還原。
+            </p>
+            <div style="background:#f8f9fa;border-radius:10px;padding:14px;margin-bottom:16px;font-size:14px;color:var(--sub);">
+                📁 備份檔案：<strong>MyPortal 我的門戶/MyPortal_backup.json</strong><br>
+                🔒 僅存取此應用程式自建的檔案，不讀取其他 Drive 內容
+            </div>
+            <button class="btn btn-primary" onclick="handleDriveAuth()" style="width:100%;justify-content:center;font-size:15px;padding:14px;" id="driveConnectBtn">
+                🔗 連接 Google Drive
+            </button>
+        </div>
+        <div id="driveConnectedContent" style="display:none;">
+            <div style="background:#e6f4ea;border-radius:10px;padding:14px;margin-bottom:16px;font-size:14px;color:#1e7e34;">
+                ✅ 已連線：<span id="driveUserEmail" style="font-weight:600;"></span>
+            </div>
+            <p style="font-size:14px;color:var(--sub);margin-bottom:14px;">上次備份：<span id="driveLastSync">--</span></p>
+            <div class="modal-actions" style="justify-content:space-between;flex-wrap:wrap;gap:8px;">
+                <button class="btn btn-primary" onclick="driveBackupNow()">📤 立即備份</button>
+                <button class="btn btn-success" onclick="driveRestoreNow()">📥 從 Drive 還原</button>
+                <button class="btn btn-danger" onclick="driveDisconnect()">🔌 取消連線</button>
+            </div>
+        </div>
+        <div style="margin-top:14px;text-align:right;">
+            <button class="btn" onclick="closeSyncModal()">關閉</button>
         </div>
     </div>
 </div>
@@ -1016,6 +1037,7 @@ window.addEventListener('DOMContentLoaded', () => {
     renderLinks();
     renderTodos();
     fetchNews();
+    driveInit();
     document.getElementById('todoInput').addEventListener('keydown', e => {
         if (e.key === 'Enter') addNewTodoBtn();
     });
@@ -1210,7 +1232,11 @@ function esc(s) {
     return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-function saveLinks() { localStorage.setItem(STORAGE_LINKS, JSON.stringify(userLinks)); }
+function saveLinks() {
+    localStorage.setItem(STORAGE_LINKS, JSON.stringify(userLinks));
+    localStorage.setItem('portal_local_save_time', Date.now());
+    driveAutoSave();
+}
 
 // ══════════════════════════════════════════════
 // CRUD
@@ -1316,32 +1342,254 @@ function importFromExcel(e) {
 }
 
 // ══════════════════════════════════════════════
-// SYNC MODAL
+// GOOGLE DRIVE AUTO SYNC
 // ══════════════════════════════════════════════
-function openSyncModal() {
-    document.getElementById('syncTextarea').value = JSON.stringify(userLinks);
-    document.getElementById('syncModal').classList.add('show');
-}
-function closeSyncModal() { document.getElementById('syncModal').classList.remove('show'); }
+const DRIVE_CLIENT_ID = '375971288943-097rhbub5h2d06f1g5lqs60in6pofj22.apps.googleusercontent.com';
+const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/userinfo.email';
+const DRIVE_FILE_NAME = 'MyPortal_backup.json';
+const STORAGE_DRIVE_EMAIL = 'portal_drive_email';
+const STORAGE_DRIVE_SYNC_TIME = 'portal_drive_sync_time';
+const STORAGE_DRIVE_FILE_ID = 'portal_drive_file_id';
 
-function copySyncData() {
-    const ta = document.getElementById('syncTextarea');
-    ta.select();
-    navigator.clipboard?.writeText(ta.value)
-        .then(() => showToast('📋 已複製！'))
-        .catch(() => showToast('請手動複製'));
+// NOTE: access_token is NOT persisted — it expires in 1hr.
+// We re-request silently (prompt:'none') on each page load.
+let driveToken = null;
+let driveFileId = localStorage.getItem(STORAGE_DRIVE_FILE_ID) || null;
+let driveAutoSaveTimer = null;
+let tokenClient = null;
+
+function driveInit() {
+    const email = localStorage.getItem(STORAGE_DRIVE_EMAIL);
+    if (!email) { updateDriveStatus(false); return; }
+
+    // Previously authorised — try to get a fresh token silently
+    updateDriveStatus('pending', email);
+    _initTokenClient(() => {
+        tokenClient.requestAccessToken({ prompt: 'none' });
+    });
 }
 
-function restoreFromModal() {
+function _initTokenClient(onReady) {
+    if (typeof google === 'undefined' || !google.accounts) {
+        // GSI not loaded yet — wait briefly
+        setTimeout(() => _initTokenClient(onReady), 500);
+        return;
+    }
+    tokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: DRIVE_CLIENT_ID,
+        scope: DRIVE_SCOPE,
+        callback: async (resp) => {
+            if (resp.error) {
+                // Silent refresh failed (e.g. user revoked) — show as disconnected
+                if (resp.error === 'interaction_required' || resp.error === 'access_denied') {
+                    updateDriveStatus(false);
+                } else {
+                    console.warn('Drive token error:', resp.error);
+                    updateDriveStatus(false);
+                }
+                return;
+            }
+            driveToken = resp.access_token;
+            const email = localStorage.getItem(STORAGE_DRIVE_EMAIL) || '已連線';
+            updateDriveStatus(true, email);
+            await driveLoadOnStart();
+        }
+    });
+    if (onReady) onReady();
+}
+
+function handleDriveAuth() {
+    openSyncModal();
+    if (driveToken) return;
+
+    _initTokenClient(() => {
+        // Full interactive prompt
+        tokenClient.callback = async (resp) => {
+            if (resp.error) { showToast('❌ 授權失敗：' + resp.error); return; }
+            driveToken = resp.access_token;
+            try {
+                const info = await fetch('https://www.googleapis.com/oauth2/v2/userinfo',
+                    { headers: { Authorization: 'Bearer ' + driveToken } }).then(r => r.json());
+                localStorage.setItem(STORAGE_DRIVE_EMAIL, info.email || '已連線');
+                updateDriveStatus(true, info.email || '已連線');
+            } catch { updateDriveStatus(true, '已連線'); }
+            showToast('✅ Google Drive 已連線，正在備份...');
+            await driveBackupNow();
+        };
+        tokenClient.requestAccessToken({ prompt: 'consent' });
+    });
+}
+
+function updateDriveStatus(state, email) {
+    const el = document.getElementById('driveStatus');
+    if (state === true) {
+        el.textContent = '☁️ 已連線';
+        el.style.borderColor = 'rgba(52,168,83,0.6)';
+        el.style.background = 'rgba(52,168,83,0.15)';
+        document.getElementById('driveModalContent').style.display = 'none';
+        document.getElementById('driveConnectedContent').style.display = 'block';
+        if (email) document.getElementById('driveUserEmail').textContent = email;
+        const t = localStorage.getItem(STORAGE_DRIVE_SYNC_TIME);
+        if (t) document.getElementById('driveLastSync').textContent = new Date(parseInt(t)).toLocaleString('zh-TW');
+    } else if (state === 'pending') {
+        el.textContent = '☁️ 連線中...';
+        el.style.borderColor = 'rgba(251,188,5,0.6)';
+        el.style.background = 'rgba(251,188,5,0.1)';
+    } else {
+        el.textContent = '☁️ 未連線';
+        el.style.borderColor = 'rgba(255,255,255,0.3)';
+        el.style.background = 'transparent';
+        document.getElementById('driveModalContent').style.display = 'block';
+        document.getElementById('driveConnectedContent').style.display = 'none';
+    }
+}
+
+
+async function driveApiCall(method, url, body) {
+    if (!driveToken) return null;
+    const headers = { Authorization: 'Bearer ' + driveToken };
+    if (body instanceof Blob) headers['Content-Type'] = body.type;
+    const opts = { method, headers };
+    if (body) opts.body = body;
+    let res = await fetch(url, opts);
+    if (res.status === 401) {
+        driveToken = null;
+        res = await new Promise(resolve => {
+            _initTokenClient(() => {
+                tokenClient.callback = async (resp) => {
+                    if (resp.error) { resolve(null); return; }
+                    driveToken = resp.access_token;
+                    headers.Authorization = 'Bearer ' + driveToken;
+                    resolve(fetch(url, { method, headers, body }));
+                };
+                tokenClient.requestAccessToken({ prompt: 'none' });
+            });
+        });
+        if (!res) return null;
+    }
+    if (!res || !res.ok) {
+        const errText = res ? await res.text().catch(() => '') : '';
+        console.error(`Drive API ${method} ${url} → ${res?.status}`, errText);
+        return null;
+    }
+    return res;
+}
+
+async function driveFindFile() {
+    if (driveFileId) return driveFileId;
+    const res = await driveApiCall('GET',
+        `https://www.googleapis.com/drive/v3/files?q=name%3D'${DRIVE_FILE_NAME}'%20and%20trashed%3Dfalse&fields=files(id%2Cname)&spaces=drive`);
+    if (!res) return null;
+    const d = await res.json();
+    if (d.files && d.files.length > 0) {
+        driveFileId = d.files[0].id;
+        localStorage.setItem(STORAGE_DRIVE_FILE_ID, driveFileId);
+        return driveFileId;
+    }
+    return null;
+}
+
+async function driveBackupNow() {
+    if (!driveToken) { showToast('⚠️ 請先連線 Google Drive'); openSyncModal(); return; }
+    const payload = JSON.stringify({ links: userLinks, todos: userTodos, savedAt: Date.now() });
+
     try {
-        const parsed = JSON.parse(document.getElementById('syncTextarea').value.trim());
-        if (!Array.isArray(parsed) || !parsed.length) throw 0;
-        userLinks = parsed.map(i => ({ name:i.name||'未命名', url:i.url||'#', desc:i.desc||'', fav:!!i.fav }));
-        renderLinks();
-        closeSyncModal();
-        showToast(`✅ 還原成功，共 ${userLinks.length} 筆`);
-    } catch { showToast('❌ 還原失敗：格式錯誤'); }
+        let fileId = await driveFindFile();
+
+        if (fileId) {
+            // Step 1: Update content only (media upload)
+            const res = await driveApiCall('PATCH',
+                `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`,
+                new Blob([payload], { type: 'application/json' })
+            );
+            if (!res) throw new Error('patch failed');
+        } else {
+            // Step 1: Create empty file with metadata
+            const metaRes = await driveApiCall('POST',
+                'https://www.googleapis.com/drive/v3/files',
+                new Blob([JSON.stringify({ name: DRIVE_FILE_NAME, mimeType: 'application/json' })],
+                    { type: 'application/json' })
+            );
+            if (!metaRes) throw new Error('create meta failed');
+            const metaObj = await metaRes.json();
+            fileId = metaObj.id;
+            driveFileId = fileId;
+            localStorage.setItem(STORAGE_DRIVE_FILE_ID, fileId);
+
+            // Step 2: Upload content to the new file
+            const contentRes = await driveApiCall('PATCH',
+                `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`,
+                new Blob([payload], { type: 'application/json' })
+            );
+            if (!contentRes) throw new Error('upload content failed');
+        }
+
+        const now = Date.now();
+        localStorage.setItem(STORAGE_DRIVE_SYNC_TIME, now);
+        document.getElementById('driveLastSync').textContent = new Date(now).toLocaleString('zh-TW');
+        document.getElementById('driveStatus').textContent = '☁️ 已同步';
+        setTimeout(() => { const el = document.getElementById('driveStatus'); if (el) el.textContent = '☁️ 已連線'; }, 3000);
+        showToast('☁️ 已自動備份至 Drive');
+    } catch(e) {
+        console.error('Backup failed', e);
+        showToast('⚠️ Drive 備份失敗：' + e.message);
+    }
 }
+
+async function driveLoadOnStart() {
+    if (!driveToken) return;
+    try {
+        const fileId = await driveFindFile();
+        if (!fileId) return;
+        const res = await driveApiCall('GET',
+            `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`);
+        if (!res) return;
+        const d = await res.json();
+        if (!d.links || !Array.isArray(d.links) || !d.links.length) return;
+        const localTime = parseInt(localStorage.getItem('portal_local_save_time') || '0');
+        if (d.savedAt && d.savedAt <= localTime) return; // local is newer
+        userLinks = d.links.map(i => ({ name:i.name||'未命名', url:i.url||'#', desc:i.desc||'', fav:!!i.fav }));
+        if (d.todos && Array.isArray(d.todos)) userTodos = d.todos;
+        renderLinks(); renderTodos();
+        showToast('☁️ 已從 Drive 載入最新資料');
+    } catch(e) { console.warn('Drive load on start failed', e); }
+}
+
+async function driveRestoreNow() {
+    if (!driveToken) { showToast('⚠️ 請先連線 Google Drive'); return; }
+    showToast('📥 正在從 Drive 還原...');
+    try {
+        const fileId = await driveFindFile();
+        if (!fileId) { showToast('⚠️ Drive 上找不到備份檔案'); return; }
+        const res = await driveApiCall('GET',
+            `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`);
+        if (!res) return;
+        const d = await res.json();
+        if (!d.links || !Array.isArray(d.links) || !d.links.length) { showToast('⚠️ 備份檔案是空的'); return; }
+        userLinks = d.links.map(i => ({ name:i.name||'未命名', url:i.url||'#', desc:i.desc||'', fav:!!i.fav }));
+        if (d.todos && Array.isArray(d.todos)) { userTodos = d.todos; saveTodos(); }
+        saveLinks(); renderLinks(); renderTodos();
+        closeSyncModal();
+        showToast(`✅ 還原成功，共 ${userLinks.length} 筆連結`);
+    } catch(e) { showToast('❌ 還原失敗'); }
+}
+
+function driveDisconnect(silent) {
+    driveToken = null;
+    driveFileId = null;
+    [STORAGE_DRIVE_EMAIL, STORAGE_DRIVE_FILE_ID, STORAGE_DRIVE_SYNC_TIME, 'portal_local_save_time'].forEach(k => localStorage.removeItem(k));
+    updateDriveStatus(false);
+    if (!silent) { closeSyncModal(); showToast('🔌 已取消 Drive 連線'); }
+}
+
+function driveAutoSave() {
+    if (!driveToken) return;
+    clearTimeout(driveAutoSaveTimer);
+    driveAutoSaveTimer = setTimeout(() => driveBackupNow(), 3000);
+}
+
+function openSyncModal() { document.getElementById('syncModal').classList.add('show'); }
+function closeSyncModal() { document.getElementById('syncModal').classList.remove('show'); }
 
 // ══════════════════════════════════════════════
 // TODO
@@ -1382,7 +1630,10 @@ function renderTodos() {
 
 function toggleTodo(idx) { userTodos[idx].done = !userTodos[idx].done; saveTodos(); renderTodos(); }
 function deleteTodo(idx) { userTodos.splice(idx,1); saveTodos(); renderTodos(); }
-function saveTodos() { localStorage.setItem(STORAGE_TODOS, JSON.stringify(userTodos)); }
+function saveTodos() {
+    localStorage.setItem(STORAGE_TODOS, JSON.stringify(userTodos));
+    driveAutoSave();
+}
 
 // ══════════════════════════════════════════════
 // NEWS (multi-category)

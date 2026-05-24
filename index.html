@@ -1444,44 +1444,35 @@ function updateDriveStatus(state, email) {
     }
 }
 
-// ─── Multipart upload helper ─────────────────
-function buildMultipart(meta, content, boundary) {
-    const enc = new TextEncoder();
-    const parts = [
-        enc.encode(`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n`),
-        enc.encode(JSON.stringify(meta)),
-        enc.encode(`\r\n--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n`),
-        enc.encode(content),
-        enc.encode(`\r\n--${boundary}--`)
-    ];
-    const total = parts.reduce((s, p) => s + p.length, 0);
-    const buf = new Uint8Array(total);
-    let offset = 0;
-    for (const p of parts) { buf.set(p, offset); offset += p.length; }
-    return new Blob([buf], { type: `multipart/related; boundary="${boundary}"` });
-}
 
 async function driveApiCall(method, url, body) {
     if (!driveToken) return null;
-    const opts = { method, headers: { Authorization: 'Bearer ' + driveToken } };
+    const headers = { Authorization: 'Bearer ' + driveToken };
+    if (body instanceof Blob) headers['Content-Type'] = body.type;
+    const opts = { method, headers };
     if (body) opts.body = body;
-    const res = await fetch(url, opts);
+    let res = await fetch(url, opts);
     if (res.status === 401) {
-        // Token expired — try silent refresh then retry once
         driveToken = null;
-        return new Promise(resolve => {
+        res = await new Promise(resolve => {
             _initTokenClient(() => {
                 tokenClient.callback = async (resp) => {
                     if (resp.error) { resolve(null); return; }
                     driveToken = resp.access_token;
-                    opts.headers.Authorization = 'Bearer ' + driveToken;
-                    resolve(fetch(url, opts));
+                    headers.Authorization = 'Bearer ' + driveToken;
+                    resolve(fetch(url, { method, headers, body }));
                 };
                 tokenClient.requestAccessToken({ prompt: 'none' });
             });
         });
+        if (!res) return null;
     }
-    return res.ok ? res : (console.error('Drive API error', res.status, await res.text().catch(()=>'')), null);
+    if (!res || !res.ok) {
+        const errText = res ? await res.text().catch(() => '') : '';
+        console.error(`Drive API ${method} ${url} → ${res?.status}`, errText);
+        return null;
+    }
+    return res;
 }
 
 async function driveFindFile() {
@@ -1501,28 +1492,37 @@ async function driveFindFile() {
 async function driveBackupNow() {
     if (!driveToken) { showToast('⚠️ 請先連線 Google Drive'); openSyncModal(); return; }
     const payload = JSON.stringify({ links: userLinks, todos: userTodos, savedAt: Date.now() });
-    const boundary = 'PortalBound' + Math.random().toString(36).slice(2, 8);
 
     try {
-        const fileId = await driveFindFile();
-        let res;
+        let fileId = await driveFindFile();
+
         if (fileId) {
-            res = await driveApiCall('PATCH',
-                `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=multipart`,
-                buildMultipart({ name: DRIVE_FILE_NAME }, payload, boundary));
+            // Step 1: Update content only (media upload)
+            const res = await driveApiCall('PATCH',
+                `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`,
+                new Blob([payload], { type: 'application/json' })
+            );
+            if (!res) throw new Error('patch failed');
         } else {
-            res = await driveApiCall('POST',
-                `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart`,
-                buildMultipart({ name: DRIVE_FILE_NAME }, payload, boundary));
-            if (res) {
-                const d = await res.clone().json().catch(() => ({}));
-                if (d.id) {
-                    driveFileId = d.id;
-                    localStorage.setItem(STORAGE_DRIVE_FILE_ID, driveFileId);
-                }
-            }
+            // Step 1: Create empty file with metadata
+            const metaRes = await driveApiCall('POST',
+                'https://www.googleapis.com/drive/v3/files',
+                new Blob([JSON.stringify({ name: DRIVE_FILE_NAME, mimeType: 'application/json' })],
+                    { type: 'application/json' })
+            );
+            if (!metaRes) throw new Error('create meta failed');
+            const metaObj = await metaRes.json();
+            fileId = metaObj.id;
+            driveFileId = fileId;
+            localStorage.setItem(STORAGE_DRIVE_FILE_ID, fileId);
+
+            // Step 2: Upload content to the new file
+            const contentRes = await driveApiCall('PATCH',
+                `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`,
+                new Blob([payload], { type: 'application/json' })
+            );
+            if (!contentRes) throw new Error('upload content failed');
         }
-        if (!res) throw new Error('api returned null');
 
         const now = Date.now();
         localStorage.setItem(STORAGE_DRIVE_SYNC_TIME, now);
@@ -1532,7 +1532,7 @@ async function driveBackupNow() {
         showToast('☁️ 已自動備份至 Drive');
     } catch(e) {
         console.error('Backup failed', e);
-        showToast('⚠️ Drive 備份失敗，請開啟主控台查看詳情');
+        showToast('⚠️ Drive 備份失敗：' + e.message);
     }
 }
 
