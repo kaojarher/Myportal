@@ -68,9 +68,9 @@
         ══════════════════════════════ */
         .wrapper {
             display: grid;
-            grid-template-columns: 340px 340px;
+            grid-template-columns: 340px 300px 300px;
             gap: 18px;
-            max-width: 720px;
+            max-width: 980px;
             margin: 18px auto;
             padding: 0 16px;
             align-items: start;
@@ -666,8 +666,8 @@
         .mobile-nav-btn .nav-icon { font-size: 24px; line-height: 1; }
         .mobile-nav-btn.active { color: var(--blue); }
 
-        /* mobile panel visibility */
-        .mobile-panel { display: contents; }
+        /* mobile panel visibility — desktop shows all 3 columns */
+        .mobile-panel { display: block; }
 
         /* ══════════════════════════════
            RESPONSIVE ≤ 900px
@@ -802,7 +802,7 @@
         </div>
     </main>
 
-    <!-- ══ RIGHT COLUMN ══ -->
+    <!-- ══ MIDDLE COLUMN ══ -->
     <aside class="mobile-panel" id="panel-aside">
 
         <!-- 天氣 -->
@@ -846,6 +846,11 @@
             </div>
         </div>
 
+    </aside>
+
+    <!-- ══ RIGHT COLUMN (NEWS) ══ -->
+    <div class="mobile-panel" id="panel-news">
+
         <!-- 新聞 -->
         <div class="card card-collapsible" id="newsCard">
             <div class="card-header" onclick="toggleCard('newsCard')">
@@ -865,7 +870,7 @@
             </div>
         </div>
 
-    </aside>
+    </div>
 </div>
 
 <!-- ══ MOBILE BOTTOM NAV ══ -->
@@ -876,6 +881,9 @@
         </button>
         <button class="mobile-nav-btn" id="nav-aside" onclick="switchPanel('aside')">
             <span class="nav-icon">☀️</span>資訊
+        </button>
+        <button class="mobile-nav-btn" id="nav-news" onclick="switchPanel('news')">
+            <span class="nav-icon">📰</span>新聞
         </button>
     </div>
 </nav>
@@ -1468,11 +1476,25 @@ async function driveApiCall(method, url, body) {
         if (!res) return null;
     }
     if (!res || !res.ok) {
-        const errText = res ? await res.text().catch(() => '') : '';
-        console.error(`Drive API ${method} ${url} → ${res?.status}`, errText);
+        const errText = res ? await res.text().catch(() => '（無法讀取）') : '（fetch 失敗）';
+        const msg = `Drive API 錯誤\n${method} → HTTP ${res?.status}\n${errText.slice(0, 300)}`;
+        console.error(msg);
+        showDriveError(msg);
         return null;
     }
     return res;
+}
+
+function showDriveError(msg) {
+    let box = document.getElementById('driveErrorBox');
+    if (!box) {
+        box = document.createElement('div');
+        box.id = 'driveErrorBox';
+        box.style.cssText = 'position:fixed;bottom:80px;left:10px;right:10px;background:#1e1e1e;color:#ff6b6b;font-size:12px;font-family:monospace;padding:12px;border-radius:10px;z-index:9999;white-space:pre-wrap;word-break:break-all;max-height:40vh;overflow-y:auto;';
+        box.onclick = () => box.remove();
+        document.body.appendChild(box);
+    }
+    box.textContent = '⚠️ 點此關閉\n\n' + msg;
 }
 
 async function driveFindFile() {
